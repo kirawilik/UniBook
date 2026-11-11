@@ -1,1 +1,2 @@
 #API Gateway (Nginx)
+#Point d’entrée unique qui redirige les requêtes vers le bon microservice
