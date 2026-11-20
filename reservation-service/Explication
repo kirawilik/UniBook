@@ -1,1 +1,193 @@
-#Microservice de réservation
+# Reservation Service : explication (Epic 3)
+
+## Rôle du service
+Le Reservation Service gère les réservations de ressources universitaires
+(salles, laboratoires, équipements). Il permet de créer, modifier et annuler
+une réservation, de consulter l'historique, et d'éviter les conflits horaires.
+
+## Organisation du code
+- `app/main.py` : point d'entrée FastAPI, création des tables, enregistrement du router.
+- `database.py` : connexion SQL Server avec SQLAlchemy (base `reservation_db`).
+- `models/reservation.py` : table `reservations` (modèle SQLAlchemy).
+- `schemas/reservation.py` : validation des données avec Pydantic.
+- `routers/reservations.py` : les routes HTTP (API REST).
+- `services/reservation_service.py` : la logique métier (conflits, création, annulation).
+- `services/resource_client.py` : appels REST vers le User & Resource Service.
+- `tests/test_reservations.py` : tests Pytest.
+
+## Modèle de données (table `reservations`)
+| Champ | Type | Description |
+|---|---|---|
+| id | int | Identifiant de la réservation |
+| user_id | int | Identifiant de l'utilisateur (géré par l'autre service) |
+| resource_id | int | Identifiant de la ressource (géré par l'autre service) |
+| date | date | Jour de la réservation |
+| start_time / end_time | time | Créneau horaire |
+| status | string | CONFIRMED ou CANCELLED |
+| created_at | datetime | Date de création |
+
+Il n'y a pas de clé étrangère vers les tables de l'autre service : chaque
+microservice possède sa propre base et ne stocke que les identifiants.
+
+## Fonctionnement d'une création de réservation
+1. Pydantic vérifie les données (`start_time` doit être avant `end_time`).
+2. Appel REST au User & Resource Service pour vérifier que l'utilisateur existe.
+3. Appel REST pour vérifier que la ressource existe.
+4. Vérification du conflit horaire en base.
+5. Enregistrement de la réservation avec le statut CONFIRMED.
+
+## Prévention des conflits horaires
+Deux réservations de la même ressource, le même jour, se chevauchent si :
+`start_existant < end_nouveau` ET `end_existant > start_nouveau`.
+Seules les réservations CONFIRMED comptent. Deux créneaux qui se suivent
+(11h-12h après 9h-11h) sont autorisés. Une annulation libère le créneau.
+
+## Codes de réponse
+- 201 : réservation créée
+- 400 : réservation déjà annulée, ou modification d'une réservation annulée
+- 404 : réservation, utilisateur ou ressource introuvable
+- 409 : créneau déjà réservé
+- 422 : données invalides
+- 503 : User & Resource Service indisponible
+
+## Annulation
+L'annulation ne supprime pas la ligne : le statut passe à CANCELLED.
+L'historique est donc conservé.
+
+## Tests
+6 tests Pytest (SQLite en mémoire et faux client REST) : création, conflit 409,
+créneaux adjacents, plage horaire invalide, annulation qui libère le créneau,
+historique par utilisateur.
+
+## Ce qui reste (Epic 4)
+Publier les événements `ReservationCreated` et `ReservationCancelled` vers
+RabbitMQ (deux commentaires `Epic 4` dans `reservation_service.py` marquent
+l'endroit).# Reservation Service : explication (Epic 3)
+
+## Rôle du service
+Le Reservation Service gère les réservations de ressources universitaires
+(salles, laboratoires, équipements). Il permet de créer, modifier et annuler
+une réservation, de consulter l'historique, et d'éviter les conflits horaires.
+
+## Organisation du code
+- `app/main.py` : point d'entrée FastAPI, création des tables, enregistrement du router.
+- `database.py` : connexion SQL Server avec SQLAlchemy (base `reservation_db`).
+- `models/reservation.py` : table `reservations` (modèle SQLAlchemy).
+- `schemas/reservation.py` : validation des données avec Pydantic.
+- `routers/reservations.py` : les routes HTTP (API REST).
+- `services/reservation_service.py` : la logique métier (conflits, création, annulation).
+- `services/resource_client.py` : appels REST vers le User & Resource Service.
+- `tests/test_reservations.py` : tests Pytest.
+
+## Modèle de données (table `reservations`)
+| Champ | Type | Description |
+|---|---|---|
+| id | int | Identifiant de la réservation |
+| user_id | int | Identifiant de l'utilisateur (géré par l'autre service) |
+| resource_id | int | Identifiant de la ressource (géré par l'autre service) |
+| date | date | Jour de la réservation |
+| start_time / end_time | time | Créneau horaire |
+| status | string | CONFIRMED ou CANCELLED |
+| created_at | datetime | Date de création |
+
+Il n'y a pas de clé étrangère vers les tables de l'autre service : chaque
+microservice possède sa propre base et ne stocke que les identifiants.
+
+## Fonctionnement d'une création de réservation
+1. Pydantic vérifie les données (`start_time` doit être avant `end_time`).
+2. Appel REST au User & Resource Service pour vérifier que l'utilisateur existe.
+3. Appel REST pour vérifier que la ressource existe.
+4. Vérification du conflit horaire en base.
+5. Enregistrement de la réservation avec le statut CONFIRMED.
+
+## Prévention des conflits horaires
+Deux réservations de la même ressource, le même jour, se chevauchent si :
+`start_existant < end_nouveau` ET `end_existant > start_nouveau`.
+Seules les réservations CONFIRMED comptent. Deux créneaux qui se suivent
+(11h-12h après 9h-11h) sont autorisés. Une annulation libère le créneau.
+
+## Codes de réponse
+- 201 : réservation créée
+- 400 : réservation déjà annulée, ou modification d'une réservation annulée
+- 404 : réservation, utilisateur ou ressource introuvable
+- 409 : créneau déjà réservé
+- 422 : données invalides
+- 503 : User & Resource Service indisponible
+
+## Annulation
+L'annulation ne supprime pas la ligne : le statut passe à CANCELLED.
+L'historique est donc conservé.
+
+## Tests
+6 tests Pytest (SQLite en mémoire et faux client REST) : création, conflit 409,
+créneaux adjacents, plage horaire invalide, annulation qui libère le créneau,
+historique par utilisateur.
+
+## Ce qui reste (Epic 4)
+Publier les événements `ReservationCreated` et `ReservationCancelled` vers
+RabbitMQ (deux commentaires `Epic 4` dans `reservation_service.py` marquent
+l'endroit).# Reservation Service : explication (Epic 3)
+
+## Rôle du service
+Le Reservation Service gère les réservations de ressources universitaires
+(salles, laboratoires, équipements). Il permet de créer, modifier et annuler
+une réservation, de consulter l'historique, et d'éviter les conflits horaires.
+
+## Organisation du code
+- `app/main.py` : point d'entrée FastAPI, création des tables, enregistrement du router.
+- `database.py` : connexion SQL Server avec SQLAlchemy (base `reservation_db`).
+- `models/reservation.py` : table `reservations` (modèle SQLAlchemy).
+- `schemas/reservation.py` : validation des données avec Pydantic.
+- `routers/reservations.py` : les routes HTTP (API REST).
+- `services/reservation_service.py` : la logique métier (conflits, création, annulation).
+- `services/resource_client.py` : appels REST vers le User & Resource Service.
+- `tests/test_reservations.py` : tests Pytest.
+
+## Modèle de données (table `reservations`)
+| Champ | Type | Description |
+|---|---|---|
+| id | int | Identifiant de la réservation |
+| user_id | int | Identifiant de l'utilisateur (géré par l'autre service) |
+| resource_id | int | Identifiant de la ressource (géré par l'autre service) |
+| date | date | Jour de la réservation |
+| start_time / end_time | time | Créneau horaire |
+| status | string | CONFIRMED ou CANCELLED |
+| created_at | datetime | Date de création |
+
+Il n'y a pas de clé étrangère vers les tables de l'autre service : chaque
+microservice possède sa propre base et ne stocke que les identifiants.
+
+## Fonctionnement d'une création de réservation
+1. Pydantic vérifie les données (`start_time` doit être avant `end_time`).
+2. Appel REST au User & Resource Service pour vérifier que l'utilisateur existe.
+3. Appel REST pour vérifier que la ressource existe.
+4. Vérification du conflit horaire en base.
+5. Enregistrement de la réservation avec le statut CONFIRMED.
+
+## Prévention des conflits horaires
+Deux réservations de la même ressource, le même jour, se chevauchent si :
+`start_existant < end_nouveau` ET `end_existant > start_nouveau`.
+Seules les réservations CONFIRMED comptent. Deux créneaux qui se suivent
+(11h-12h après 9h-11h) sont autorisés. Une annulation libère le créneau.
+
+## Codes de réponse
+- 201 : réservation créée
+- 400 : réservation déjà annulée, ou modification d'une réservation annulée
+- 404 : réservation, utilisateur ou ressource introuvable
+- 409 : créneau déjà réservé
+- 422 : données invalides
+- 503 : User & Resource Service indisponible
+
+## Annulation
+L'annulation ne supprime pas la ligne : le statut passe à CANCELLED.
+L'historique est donc conservé.
+
+## Tests
+6 tests Pytest (SQLite en mémoire et faux client REST) : création, conflit 409,
+créneaux adjacents, plage horaire invalide, annulation qui libère le créneau,
+historique par utilisateur.
+
+## Ce qui reste (Epic 4)
+Publier les événements `ReservationCreated` et `ReservationCancelled` vers
+RabbitMQ (deux commentaires `Epic 4` dans `reservation_service.py` marquent
+l'endroit).
