@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pyodbc
+python-dotenv
+pydantic[email]
+pika
+pytest
+httpx
